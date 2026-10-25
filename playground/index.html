@@ -3,7 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mermaid Playground</title>
+    <title>mermaidStacks</title>
+    <meta
+      name="description"
+      content="A Mermaid playground with stacked subgraphs: flush boxes in one block, with edges still connecting to each box."
+    />
     <style>
       :root {
         --bg: #f7f7f8;
@@ -12,7 +16,9 @@
         --muted: #6b6b72;
         --border: #dcdce0;
         --accent: #3b5bdb;
+        --accent-soft: #e7ecff;
         --error: #c92a2a;
+        --shadow: 0 4px 16px rgb(0 0 0 / 0.08);
         color-scheme: light;
       }
       @media (prefers-color-scheme: dark) {
@@ -23,7 +29,9 @@
           --muted: #9a9aa3;
           --border: #34343a;
           --accent: #7c95ff;
+          --accent-soft: #252b45;
           --error: #ff8787;
+          --shadow: 0 4px 16px rgb(0 0 0 / 0.4);
           color-scheme: dark;
         }
       }
@@ -46,17 +54,38 @@
         flex-direction: column;
       }
       header {
+        padding: 12px 16px 10px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .brand h1 {
+        font-size: 20px;
+        margin: 0;
+        letter-spacing: -0.01em;
+      }
+      .brand h1 span {
+        color: var(--accent);
+      }
+      .brand p {
+        margin: 2px 0 10px;
+        color: var(--muted);
+      }
+      code {
+        font:
+          12.5px ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        background: var(--accent-soft);
+        color: var(--text);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+      .toolbar {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: 8px 12px;
-        padding: 10px 16px;
-        border-bottom: 1px solid var(--border);
-        background: var(--panel);
-      }
-      header h1 {
-        font-size: 15px;
-        margin: 0 8px 0 0;
       }
       label {
         color: var(--muted);
@@ -65,18 +94,33 @@
         gap: 6px;
       }
       select,
-      button {
+      button,
+      input[type='text'] {
         font: inherit;
         color: var(--text);
         background: var(--bg);
         border: 1px solid var(--border);
         border-radius: 6px;
         padding: 4px 10px;
+      }
+      select,
+      button {
         cursor: pointer;
       }
       button:hover,
       select:hover {
         border-color: var(--accent);
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
       }
       .spacer {
         flex: 1;
@@ -109,15 +153,61 @@
         outline: none;
       }
       #preview {
-        overflow: auto;
-        padding: 24px;
-        display: flex;
-        align-items: flex-start;
-        justify-content: center;
+        position: relative;
+        overflow: hidden;
+        min-height: 0;
+        cursor: grab;
+        touch-action: none;
       }
-      #preview svg {
-        max-width: 100%;
-        height: auto;
+      #preview.panning {
+        cursor: grabbing;
+      }
+      #stage {
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform-origin: 0 0;
+        will-change: transform;
+      }
+      #stage svg {
+        display: block;
+        max-width: none !important;
+      }
+      .zoom {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 4px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        cursor: default;
+      }
+      .zoom button {
+        border: 0;
+        background: transparent;
+        min-width: 30px;
+        padding: 4px 8px;
+      }
+      .zoom button:hover {
+        background: var(--accent-soft);
+      }
+      #zoomLevel {
+        min-width: 48px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .zoom .divider {
+        width: 1px;
+        align-self: stretch;
+        margin: 2px 4px;
+        background: var(--border);
       }
       #error {
         display: none;
@@ -131,6 +221,82 @@
           12px/1.4 ui-monospace,
           Menlo,
           monospace;
+      }
+      /* Snapshots drawer */
+      #snapshots {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(360px, 100vw);
+        background: var(--panel);
+        border-left: 1px solid var(--border);
+        box-shadow: var(--shadow);
+        display: flex;
+        flex-direction: column;
+        transform: translateX(100%);
+        transition: transform 0.18s ease;
+        z-index: 10;
+      }
+      #snapshots.open {
+        transform: none;
+      }
+      .drawer-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .drawer-head h2 {
+        font-size: 15px;
+        margin: 0;
+      }
+      #saveForm {
+        display: flex;
+        gap: 8px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      #saveForm input {
+        flex: 1;
+        min-width: 0;
+      }
+      #snapshotList {
+        list-style: none;
+        margin: 0;
+        padding: 8px;
+        overflow: auto;
+        flex: 1;
+      }
+      #snapshotList li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px;
+        border-radius: 6px;
+      }
+      #snapshotList li:hover {
+        background: var(--bg);
+      }
+      .snap-info {
+        flex: 1;
+        min-width: 0;
+      }
+      .snap-name {
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .snap-meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .snap-empty {
+        color: var(--muted);
+        padding: 16px 8px;
+        text-align: center;
       }
       @media (max-width: 720px) {
         main {
@@ -146,37 +312,76 @@
   </head>
   <body>
     <header>
-      <h1>Mermaid Playground</h1>
-      <label
-        >Example
-        <select id="example"></select>
-      </label>
-      <label
-        >Layout
-        <select id="layout">
-          <option value="elk">ELK</option>
-          <option value="dagre">dagre</option>
-        </select>
-      </label>
-      <label
-        >Theme
-        <select id="theme">
-          <option value="default">default</option>
-          <option value="neutral">neutral</option>
-          <option value="dark">dark</option>
-          <option value="forest">forest</option>
-        </select>
-      </label>
-      <span class="spacer"></span>
-      <span id="status"></span>
-      <button id="share" type="button">Copy link</button>
-      <button id="download" type="button">Download SVG</button>
+      <div class="brand">
+        <h1>mermaid<span>Stacks</span></h1>
+        <p>
+          Add <code>id@{ layout: stack }</code> after a subgraph to draw its nodes as touching boxes
+          in one block, and links to any node still land on its own box.
+        </p>
+      </div>
+      <div class="toolbar">
+        <label
+          >Example
+          <select id="example"></select>
+        </label>
+        <label
+          >Layout
+          <select id="layout">
+            <option value="elk">ELK</option>
+            <option value="dagre">dagre</option>
+          </select>
+        </label>
+        <label
+          >Theme
+          <select id="theme">
+            <option value="default">default</option>
+            <option value="neutral">neutral</option>
+            <option value="dark">dark</option>
+            <option value="forest">forest</option>
+          </select>
+        </label>
+        <span class="spacer"></span>
+        <span id="status" aria-live="polite"></span>
+        <button id="openSnapshots" type="button" aria-controls="snapshots" aria-expanded="false">
+          Snapshots
+        </button>
+        <button id="share" type="button">Copy link</button>
+        <button id="download" type="button">Download SVG</button>
+      </div>
     </header>
     <main>
       <textarea id="code" spellcheck="false" aria-label="Diagram code"></textarea>
-      <div id="preview" aria-live="polite"></div>
+      <div id="preview" aria-label="Diagram preview: drag to pan, scroll to zoom">
+        <div id="stage"></div>
+        <div class="zoom" role="toolbar" aria-label="Zoom and pan">
+          <button type="button" data-pan="left" title="Pan left" aria-label="Pan left">◀</button>
+          <button type="button" data-pan="up" title="Pan up" aria-label="Pan up">▲</button>
+          <button type="button" data-pan="down" title="Pan down" aria-label="Pan down">▼</button>
+          <button type="button" data-pan="right" title="Pan right" aria-label="Pan right">
+            ▶
+          </button>
+          <span class="divider" aria-hidden="true"></span>
+          <button type="button" id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+          <span id="zoomLevel">100%</span>
+          <button type="button" id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+          <button type="button" id="zoomFit" title="Fit to view">Fit</button>
+          <button type="button" id="zoomReset" title="Actual size">1:1</button>
+        </div>
+      </div>
     </main>
     <pre id="error"></pre>
+
+    <aside id="snapshots" aria-label="Snapshots" aria-hidden="true">
+      <div class="drawer-head">
+        <h2>Snapshots</h2>
+        <button id="closeSnapshots" type="button" aria-label="Close snapshots">✕</button>
+      </div>
+      <form id="saveForm">
+        <input id="snapshotName" type="text" placeholder="Name this snapshot" maxlength="80" />
+        <button class="primary" type="submit">Save</button>
+      </form>
+      <ul id="snapshotList"></ul>
+    </aside>
 
     <script type="module">
       import mermaid from './mermaid.esm.min.mjs';
@@ -229,6 +434,7 @@
       const $ = (id) => document.getElementById(id);
       const code = $('code');
       const preview = $('preview');
+      const stage = $('stage');
       const error = $('error');
       const status = $('status');
 
@@ -236,6 +442,7 @@
         $('example').append(new Option(name, name));
       }
 
+      // ── Shareable links ─────────────────────────────────────────────────
       // The diagram lives in the URL hash, so a link reproduces it exactly.
       const encode = (text) =>
         btoa(String.fromCharCode(...new TextEncoder().encode(text)))
@@ -267,13 +474,101 @@
         history.replaceState(null, '', '#' + params);
       };
 
-      const initial = readHash();
-      code.value = initial.code ?? examples['Stacked subgraph'];
-      if (initial.layout) $('layout').value = initial.layout;
-      if (initial.theme) $('theme').value = initial.theme;
-      else if (matchMedia('(prefers-color-scheme: dark)').matches) $('theme').value = 'dark';
+      // ── Zoom and pan ────────────────────────────────────────────────────
+      const view = { x: 0, y: 0, k: 1 };
+      const MIN_ZOOM = 0.1;
+      const MAX_ZOOM = 8;
+      const PAN_STEP = 80;
 
+      const applyView = () => {
+        stage.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+        $('zoomLevel').textContent = `${Math.round(view.k * 100)}%`;
+      };
+      const diagramSize = () => {
+        const svg = stage.querySelector('svg');
+        return svg ? { width: svg.clientWidth, height: svg.clientHeight } : undefined;
+      };
+      // Zoom about a point of the pane, keeping that point still.
+      const zoomAt = (factor, px, py) => {
+        const k = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, view.k * factor));
+        view.x = px - ((px - view.x) * k) / view.k;
+        view.y = py - ((py - view.y) * k) / view.k;
+        view.k = k;
+        applyView();
+      };
+      const zoomCentre = (factor) =>
+        zoomAt(factor, preview.clientWidth / 2, preview.clientHeight / 2);
+      const centreAt = (k) => {
+        const size = diagramSize();
+        if (!size) return;
+        view.k = k;
+        view.x = (preview.clientWidth - size.width * k) / 2;
+        view.y = Math.max(24, (preview.clientHeight - size.height * k) / 2);
+        applyView();
+      };
+      const fit = () => {
+        const size = diagramSize();
+        if (!size || !size.width || !size.height) return;
+        const pad = 48;
+        const k = Math.min(
+          2,
+          (preview.clientWidth - pad) / size.width,
+          (preview.clientHeight - pad) / size.height
+        );
+        centreAt(Math.max(MIN_ZOOM, k));
+      };
+
+      $('zoomIn').addEventListener('click', () => zoomCentre(1.25));
+      $('zoomOut').addEventListener('click', () => zoomCentre(1 / 1.25));
+      $('zoomFit').addEventListener('click', fit);
+      $('zoomReset').addEventListener('click', () => centreAt(1));
+      for (const button of document.querySelectorAll('[data-pan]')) {
+        button.addEventListener('click', () => {
+          const dir = button.dataset.pan;
+          view.x += dir === 'left' ? PAN_STEP : dir === 'right' ? -PAN_STEP : 0;
+          view.y += dir === 'up' ? PAN_STEP : dir === 'down' ? -PAN_STEP : 0;
+          applyView();
+        });
+      }
+
+      preview.addEventListener(
+        'wheel',
+        (e) => {
+          e.preventDefault();
+          const rect = preview.getBoundingClientRect();
+          // Trackpad pinches arrive as ctrl+wheel with small deltas.
+          const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015));
+          zoomAt(factor, e.clientX - rect.left, e.clientY - rect.top);
+        },
+        { passive: false }
+      );
+
+      let drag;
+      preview.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || e.target.closest('.zoom')) return;
+        drag = { id: e.pointerId, x: e.clientX - view.x, y: e.clientY - view.y };
+        preview.setPointerCapture(e.pointerId);
+        preview.classList.add('panning');
+      });
+      preview.addEventListener('pointermove', (e) => {
+        if (drag?.id !== e.pointerId) return;
+        view.x = e.clientX - drag.x;
+        view.y = e.clientY - drag.y;
+        applyView();
+      });
+      const endDrag = (e) => {
+        if (drag?.id !== e.pointerId) return;
+        drag = undefined;
+        preview.classList.remove('panning');
+      };
+      preview.addEventListener('pointerup', endDrag);
+      preview.addEventListener('pointercancel', endDrag);
+
+      // ── Rendering ───────────────────────────────────────────────────────
       let renderId = 0;
+      // A fresh diagram (example, snapshot, first load) is fitted to the pane;
+      // edits keep wherever the user has zoomed and panned to.
+      let refit = true;
       const render = async () => {
         const id = ++renderId;
         mermaid.initialize({
@@ -287,7 +582,19 @@
           await mermaid.parse(code.value);
           const { svg } = await mermaid.render('diagram' + id, code.value);
           if (id !== renderId) return;
-          preview.innerHTML = svg;
+          stage.innerHTML = svg;
+          // Draw at the diagram's own size; the stage transform does the zooming.
+          const el = stage.querySelector('svg');
+          const box = el?.viewBox?.baseVal;
+          if (el && box?.width) {
+            el.setAttribute('width', box.width);
+            el.setAttribute('height', box.height);
+            el.style.maxWidth = 'none';
+          }
+          if (refit) {
+            refit = false;
+            fit();
+          }
           error.style.display = 'none';
           status.textContent = `${Math.round(performance.now() - started)} ms`;
         } catch (e) {
@@ -306,6 +613,19 @@
         clearTimeout(timer);
         timer = setTimeout(render, 250);
       };
+      const load = ({ code: text, layout, theme }) => {
+        code.value = text;
+        if (layout) $('layout').value = layout;
+        if (theme) $('theme').value = theme;
+        refit = true;
+        render();
+      };
+
+      const initial = readHash();
+      code.value = initial.code ?? examples['Stacked subgraph'];
+      if (initial.layout) $('layout').value = initial.layout;
+      if (initial.theme) $('theme').value = initial.theme;
+      else if (matchMedia('(prefers-color-scheme: dark)').matches) $('theme').value = 'dark';
 
       code.addEventListener('input', scheduleRender);
       code.addEventListener('keydown', (e) => {
@@ -315,12 +635,12 @@
           scheduleRender();
         }
       });
-      $('layout').addEventListener('change', render);
-      $('theme').addEventListener('change', render);
-      $('example').addEventListener('change', (e) => {
-        code.value = examples[e.target.value];
+      $('layout').addEventListener('change', () => {
+        refit = true;
         render();
       });
+      $('theme').addEventListener('change', render);
+      $('example').addEventListener('change', (e) => load({ code: examples[e.target.value] }));
       $('share').addEventListener('click', async () => {
         writeHash();
         try {
@@ -331,7 +651,7 @@
         }
       });
       $('download').addEventListener('click', () => {
-        const svg = preview.querySelector('svg');
+        const svg = stage.querySelector('svg');
         if (!svg) return;
         const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
         const a = Object.assign(document.createElement('a'), {
@@ -340,6 +660,119 @@
         });
         a.click();
         URL.revokeObjectURL(a.href);
+      });
+
+      // ── Snapshots (this browser only, in localStorage) ──────────────────
+      const STORAGE_KEY = 'mermaidStacks.snapshots';
+      const readSnapshots = () => {
+        try {
+          const list = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
+          return Array.isArray(list) ? list : [];
+        } catch {
+          return [];
+        }
+      };
+      const writeSnapshots = (list) => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+          return true;
+        } catch {
+          status.textContent = 'Could not save: browser storage is unavailable or full';
+          return false;
+        }
+      };
+      const formatDate = (iso) =>
+        new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
+      const renderSnapshotList = () => {
+        const list = $('snapshotList');
+        list.replaceChildren();
+        const snapshots = readSnapshots();
+        if (!snapshots.length) {
+          const empty = document.createElement('li');
+          empty.className = 'snap-empty';
+          empty.textContent = 'No snapshots yet. Save one to keep this diagram in this browser.';
+          list.append(empty);
+          return;
+        }
+        for (const snap of snapshots) {
+          const item = document.createElement('li');
+          const info = document.createElement('div');
+          info.className = 'snap-info';
+          const name = document.createElement('div');
+          name.className = 'snap-name';
+          name.textContent = snap.name;
+          name.title = snap.name;
+          const meta = document.createElement('div');
+          meta.className = 'snap-meta';
+          meta.textContent = `${formatDate(snap.savedAt)} · ${snap.layout}`;
+          info.append(name, meta);
+
+          const open = document.createElement('button');
+          open.type = 'button';
+          open.textContent = 'Load';
+          open.addEventListener('click', () => {
+            load(snap);
+            status.textContent = `Loaded “${snap.name}”`;
+            closeDrawer();
+          });
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.textContent = 'Delete';
+          remove.setAttribute('aria-label', `Delete ${snap.name}`);
+          remove.addEventListener('click', () => {
+            if (!confirm(`Delete snapshot “${snap.name}”?`)) return;
+            writeSnapshots(readSnapshots().filter((s) => s.id !== snap.id));
+            renderSnapshotList();
+          });
+          item.append(info, open, remove);
+          list.append(item);
+        }
+      };
+
+      const drawer = $('snapshots');
+      const openDrawer = () => {
+        renderSnapshotList();
+        drawer.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+        $('openSnapshots').setAttribute('aria-expanded', 'true');
+        $('snapshotName').focus();
+      };
+      const closeDrawer = () => {
+        drawer.classList.remove('open');
+        drawer.setAttribute('aria-hidden', 'true');
+        $('openSnapshots').setAttribute('aria-expanded', 'false');
+      };
+      $('openSnapshots').addEventListener('click', () =>
+        drawer.classList.contains('open') ? closeDrawer() : openDrawer()
+      );
+      $('closeSnapshots').addEventListener('click', closeDrawer);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && drawer.classList.contains('open')) closeDrawer();
+      });
+
+      $('saveForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = $('snapshotName');
+        const name = input.value.trim() || `Snapshot ${formatDate(new Date().toISOString())}`;
+        const snapshot = {
+          id: crypto.randomUUID?.() ?? String(Date.now()),
+          name,
+          code: code.value,
+          layout: $('layout').value,
+          theme: $('theme').value,
+          savedAt: new Date().toISOString(),
+        };
+        if (writeSnapshots([snapshot, ...readSnapshots()])) {
+          input.value = '';
+          status.textContent = `Saved “${name}”`;
+          renderSnapshotList();
+        }
+      });
+
+      window.addEventListener('resize', () => {
+        if (!stage.querySelector('svg')) return;
+        applyView();
       });
 
       render();
