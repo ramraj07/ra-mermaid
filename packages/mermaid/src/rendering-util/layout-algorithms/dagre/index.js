@@ -14,6 +14,7 @@ import {
 import { positionNode, setNodeElem } from '../../rendering-elements/nodes.js';
 import { insertCluster } from '../../rendering-elements/clusters.js';
 import { insertEdgeLabel, positionEdgeLabel, insertEdge } from '../../rendering-elements/edges.js';
+import { routeEdgeToStackLayers, stackLayerNode } from './stackLayers.js';
 import { log } from '../../../logger.js';
 import { getSubGraphTitleMargins } from '../../../utils/subGraphTitleMargins.js';
 import { getConfig } from '../../../diagram-api/diagramAPI.js';
@@ -521,7 +522,12 @@ export const applyDagreLayoutResult = (data4Layout, measuredLayout) => {
 
   const edgeOffsetY = subGraphTitleTotalMargin / 2;
   data4Layout.edges = getEdgesToRender(graph, edgeOffsetY, { mergeSelfLoops }).map(
-    ({ edge, start, end }) => normalizeDagreEdge(edge, start, end, edgeOffsetY)
+    ({ edge, start, end }) => {
+      const normalized = normalizeDagreEdge(edge, start, end, edgeOffsetY);
+      // An end on a stack layer is routed to that layer; `getDagreEdgeNode` clips it there.
+      routeEdgeToStackLayers(normalized, graph.node(start), graph.node(end));
+      return normalized;
+    }
   );
 
   return data4Layout;
@@ -623,8 +629,8 @@ const paintDagreLayoutCore = async ({
     log.info('Edge ' + start + ' -> ' + end + ': ' + JSON.stringify(edge), edge);
 
     edge.points.forEach((point) => (point.y += edgeOffsetY));
-    const startNode = graph.node(start);
-    const endNode = graph.node(end);
+    // An end on a stack layer is routed to, and clipped against, that layer alone.
+    const { startNode, endNode } = routeEdgeToStackLayers(edge, graph.node(start), graph.node(end));
     const paths = insertEdge(edgePaths, edge, clusterDb, diagramType, startNode, endNode, id);
     positionEdgeLabel(edge, paths);
   });
@@ -801,8 +807,13 @@ const getDagrePaintNodes = (_data4Layout, { measure }) =>
     .map((nodeId) => measure.graph.node(nodeId))
     .filter(Boolean);
 
-const getDagreEdgeNode = (nodeId, _edge, { measure }) =>
-  nodeId ? measure.graph.node(nodeId) : undefined;
+const getDagreEdgeNode = (nodeId, edge, { measure }) =>
+  nodeId
+    ? stackLayerNode(
+        measure.graph.node(nodeId),
+        nodeId === edge.start ? edge.startLayer : edge.endLayer
+      )
+    : undefined;
 
 export const render = createCommonLayoutRenderer({
   prepareLayout: prepareLayoutForDagre,

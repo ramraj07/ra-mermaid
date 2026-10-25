@@ -5,6 +5,7 @@ import { anchor } from './shapes/anchor.js';
 import { bowTieRect } from './shapes/bowTieRect.js';
 import { bucket } from './shapes/bucket.js';
 import { collapsedGroup } from './shapes/collapsedGroup.js';
+import { stack } from './shapes/stack.js';
 import { block_arrow } from './shapes/blockArrow.js';
 import { browser } from './shapes/browser.js';
 import { card } from './shapes/card.js';
@@ -549,6 +550,9 @@ const generateShapeMap = () => {
 
     // Collapsed subgraph (flowchart `@{ view: collapsed }`)
     collapsedGroup,
+
+    // Stacked subgraph (flowchart `@{ layout: stack }`)
+    stack,
 
     // Icons
     iconSquare,

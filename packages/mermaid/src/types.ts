@@ -18,6 +18,11 @@ export interface NodeMetaData {
    * to it; `expanded` (the default) renders the subgraph normally.
    */
   view?: 'expanded' | 'collapsed';
+  /**
+   * Layout of a subgraph's members (flowchart). `stack` draws the members as
+   * flush layers of one box; edges still attach to the individual layers.
+   */
+  layout?: 'stack';
 }
 
 export interface ParticipantMetaData {

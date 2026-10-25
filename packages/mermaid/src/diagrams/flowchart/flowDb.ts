@@ -46,6 +46,13 @@ export class FlowDB implements DiagramDB {
   private subGraphLookup = new Map<string, FlowSubGraph>();
   private tooltips = new Map<string, string>();
   private subCount = 0;
+  /**
+   * When each id was last written, as a running count. A subgraph closes right
+   * after its body, so this orders its members as the body lists them, which the
+   * member list does not: a chain such as `A --> B --> C` arrives newest first.
+   */
+  private lastMention = new Map<string, number>();
+  private mentionCount = 0;
   private firstGraphFlag = true;
   private direction: string | undefined;
   private version: string | undefined; // As in graph
@@ -137,6 +144,7 @@ export class FlowDB implements DiagramDB {
     if (!id || id.trim().length === 0) {
       return;
     }
+    this.lastMention.set(id, this.mentionCount++);
     // Extract the metadata from the shapeData, the syntax for adding metadata for nodes and edges is the same
     // so at this point we don't know if it's a node or an edge, but we can still extract the metadata
     let doc;
@@ -656,6 +664,8 @@ You have to call mermaid.initialize.`
     this.subGraphs = [];
     this.subGraphLookup = new Map();
     this.subCount = 0;
+    this.lastMention = new Map();
+    this.mentionCount = 0;
     this.tooltips = new Map();
     this.firstGraphFlag = true;
     this.version = ver;
@@ -727,9 +737,13 @@ You have to call mermaid.initialize.`
     title = this.sanitizeText(title);
     this.subCount = this.subCount + 1;
 
-    const subGraph = {
+    const subGraph: FlowSubGraph = {
       id: id,
       nodes: nodeList,
+      // Snapshot taken as the subgraph closes, before anything later can mention a member.
+      memberOrder: [...nodeList].sort(
+        (a, b) => (this.lastMention.get(a) ?? 0) - (this.lastMention.get(b) ?? 0)
+      ),
       title: title.trim(),
       classes: [],
       dir,
@@ -749,6 +763,7 @@ You have to call mermaid.initialize.`
     const existing = this.subGraphs.find((sg) => sg.id === id);
     if (existing) {
       existing.nodes.push(...subGraph.nodes);
+      existing.memberOrder?.push(...(subGraph.memberOrder ?? []));
     } else {
       this.subGraphs.push(subGraph);
     }
@@ -1053,29 +1068,7 @@ You have to call mermaid.initialize.`
       node.cssCompiledStyles = this.getCompiledStyles(vertex.classes);
       node.cssClasses = vertex.classes.join(' ');
     } else {
-      const baseNode = {
-        id: vertex.id,
-        label: vertex.text,
-        labelType: vertex.labelType,
-        labelStyle: '',
-        parentId,
-        padding: config.flowchart?.padding || 8,
-        cssStyles: vertex.styles,
-        cssCompiledStyles: this.getCompiledStyles(['default', 'node', ...vertex.classes]),
-        cssClasses: 'default ' + vertex.classes.join(' '),
-        dir: vertex.dir,
-        domId: vertex.domId,
-        look,
-        link: vertex.link,
-        linkTarget: vertex.linkTarget,
-        tooltip: this.getTooltip(vertex.id),
-        icon: vertex.icon,
-        pos: vertex.pos,
-        img: vertex.img,
-        assetWidth: vertex.assetWidth,
-        assetHeight: vertex.assetHeight,
-        constraint: vertex.constraint,
-      };
+      const baseNode = { ...this.baseNodeFromVertex(vertex, config, look), parentId };
       if (isGroup) {
         nodes.push({
           ...baseNode,
@@ -1091,6 +1084,31 @@ You have to call mermaid.initialize.`
         });
       }
     }
+  }
+
+  private baseNodeFromVertex(vertex: FlowVertex, config: any, look: string) {
+    return {
+      id: vertex.id,
+      label: vertex.text,
+      labelType: vertex.labelType,
+      labelStyle: '',
+      padding: config.flowchart?.padding || 8,
+      cssStyles: vertex.styles,
+      cssCompiledStyles: this.getCompiledStyles(['default', 'node', ...vertex.classes]),
+      cssClasses: 'default ' + vertex.classes.join(' '),
+      dir: vertex.dir,
+      domId: vertex.domId,
+      look,
+      link: vertex.link,
+      linkTarget: vertex.linkTarget,
+      tooltip: this.getTooltip(vertex.id),
+      icon: vertex.icon,
+      pos: vertex.pos,
+      img: vertex.img,
+      assetWidth: vertex.assetWidth,
+      assetHeight: vertex.assetHeight,
+      constraint: vertex.constraint,
+    };
   }
 
   private getCompiledStyles(classDefs: string[]) {
@@ -1205,13 +1223,36 @@ You have to call mermaid.initialize.`
       }
     }
 
+    // ── Stacked subgraphs ────────────────────────────────────────────────
+    // A subgraph carrying `@{ layout: stack }` is drawn as a single node whose
+    // members are flush layers. The members are not laid out on their own: an
+    // edge to one is redirected to the stack and remembers which layer it
+    // attaches to, so the layout can still land it on that layer. A stack
+    // holding another subgraph has no layer to give it and renders as usual.
+    const stackOf = new Map<string, string>();
+    const stackIds = new Set<string>();
+    for (const sg of subGraphs) {
+      if (hiddenIds.has(sg.id) || isCollapsed(sg.id) || sg.metadata?.layout !== 'stack') {
+        continue;
+      }
+      if (sg.nodes.some((id) => this.subGraphLookup.has(id))) {
+        log.warn('A stacked subgraph cannot hold another subgraph, rendering normally:', sg.id);
+        continue;
+      }
+      stackIds.add(sg.id);
+      for (const childId of sg.nodes) {
+        stackOf.set(childId, sg.id);
+        hiddenIds.add(childId);
+      }
+    }
+
     // Setup the subgraph data for adding nodes
     for (let i = subGraphs.length - 1; i >= 0; i--) {
       const subGraph = subGraphs[i];
       if (hiddenIds.has(subGraph.id)) {
         continue;
       }
-      if (subGraph.nodes.length > 0) {
+      if (subGraph.nodes.length > 0 && !stackIds.has(subGraph.id)) {
         subGraphDB.set(subGraph.id, true);
       }
       for (const id of subGraph.nodes) {
@@ -1225,7 +1266,39 @@ You have to call mermaid.initialize.`
       if (hiddenIds.has(subGraph.id)) {
         continue;
       }
-      if (subGraph.metadata?.view === 'collapsed') {
+      if (stackIds.has(subGraph.id)) {
+        const look = config.look || 'classic';
+        nodes.push({
+          id: subGraph.id,
+          label: subGraph.title,
+          labelStyle: '',
+          labelType: subGraph.labelType,
+          parentId: parentDB.get(subGraph.id),
+          padding: config.flowchart?.padding || 8,
+          cssCompiledStyles: this.getCompiledStyles(subGraph.classes),
+          cssClasses: subGraph.classes.join(' '),
+          shape: 'stack',
+          dir: subGraph.dir ?? 'TB',
+          isGroup: false,
+          look: config.look,
+          // `memberOrder` may still hold members a later subgraph took over.
+          stackLayers: (subGraph.memberOrder ?? subGraph.nodes)
+            .filter((memberId) => subGraph.nodes.includes(memberId))
+            .flatMap((memberId) => {
+              const vertex = this.vertices.get(memberId);
+              return vertex
+                ? [
+                    {
+                      ...this.baseNodeFromVertex(vertex, config, look),
+                      shape: 'squareRect' as const,
+                      isGroup: false as const,
+                      minWidth: config.flowchart?.minNodeWidth,
+                    },
+                  ]
+                : [];
+            }),
+        });
+      } else if (subGraph.metadata?.view === 'collapsed') {
         // Collapsed: draw as a single compact node instead of a container.
         nodes.push({
           id: subGraph.id,
@@ -1287,12 +1360,15 @@ You have to call mermaid.initialize.`
       // edge that becomes a self-loop purely because both endpoints collapsed
       // into the same node (i.e. it was internal to a collapsed subgraph) is
       // dropped — self-loops on nodes that are not collapsed are preserved.
-      const start = collapsedAncestorMap.get(rawEdge.start) ?? rawEdge.start;
-      const end = collapsedAncestorMap.get(rawEdge.end) ?? rawEdge.end;
-      if (
-        start === end &&
-        (collapsedAncestorMap.has(rawEdge.start) || collapsedAncestorMap.has(rawEdge.end))
-      ) {
+      // An edge to a stack member is redirected to the stack the same way, and
+      // keeps the member as the layer it attaches to. One between two layers of
+      // the same stack has nothing left to connect and is dropped too.
+      const startLayer = stackOf.has(rawEdge.start) ? rawEdge.start : undefined;
+      const endLayer = stackOf.has(rawEdge.end) ? rawEdge.end : undefined;
+      const start =
+        collapsedAncestorMap.get(rawEdge.start) ?? stackOf.get(rawEdge.start) ?? rawEdge.start;
+      const end = collapsedAncestorMap.get(rawEdge.end) ?? stackOf.get(rawEdge.end) ?? rawEdge.end;
+      if (start === end && (start !== rawEdge.start || end !== rawEdge.end)) {
         return;
       }
 
@@ -1300,10 +1376,17 @@ You have to call mermaid.initialize.`
         styles.push(...rawEdge.style);
       }
       const edge: Edge = {
-        id: getEdgeId(start, end, { counter: index, prefix: 'L' }, rawEdge.id),
+        id: getEdgeId(
+          startLayer ?? start,
+          endLayer ?? end,
+          { counter: index, prefix: 'L' },
+          rawEdge.id
+        ),
         isUserDefinedId: rawEdge.isUserDefinedId,
         start,
         end,
+        startLayer,
+        endLayer,
         type: rawEdge.type ?? 'normal',
         label: rawEdge.text,
         labelType: rawEdge.labelType,

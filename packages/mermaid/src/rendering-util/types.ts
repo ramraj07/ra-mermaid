@@ -105,6 +105,21 @@ interface BaseNode {
   taper?: number;
   stroke?: string;
   colorIndex?: number;
+  /** Members of a stacked subgraph (`@{ layout: stack }`), drawn as flush layers in order. */
+  stackLayers?: Node[];
+  /**
+   * Where the `stack` shape put each layer: centre offset from the stack's own
+   * centre, and size. Set while measuring, read by the layouts to attach edges.
+   */
+  stackLayerBoxes?: StackLayerBox[];
+}
+
+export interface StackLayerBox {
+  id: string;
+  dx: number;
+  dy: number;
+  width: number;
+  height: number;
 }
 
 /**
@@ -213,6 +228,10 @@ export interface Edge {
    * that route or render edges must skip any edge with `isLayoutOnly: true`.
    */
   isLayoutOnly?: boolean;
+  /** Layer of a stacked start node this edge leaves from (the member's id). */
+  startLayer?: string;
+  /** Layer of a stacked end node this edge arrives at (the member's id). */
+  endLayer?: string;
 }
 
 export interface RectOptions {

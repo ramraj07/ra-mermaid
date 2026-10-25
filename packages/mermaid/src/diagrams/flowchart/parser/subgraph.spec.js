@@ -352,4 +352,131 @@ describe('when parsing subgraphs', function () {
     expect(edges.find((e) => e.start === 'C' && e.end === 'one')).toBeDefined();
     expect(edges.find((e) => e.end === 'A')).toBeUndefined();
   });
+
+  describe('stacked subgraphs (`@{ layout: stack }`)', function () {
+    const parseStack = (body) => {
+      flow.parser.parse(body);
+      return flow.parser.yy.getData();
+    };
+
+    it('draws the subgraph as one stack node with its members as layers, in order', function () {
+      const { nodes } = parseStack(`
+        flowchart LR
+          subgraph S [Our stack]
+            UI[Frontend]
+            API[API layer]
+            DB[(Database)]
+          end
+          S@{ layout: stack }
+      `);
+      const stack = nodes.find((n) => n.id === 'S');
+      expect(stack?.shape).toBe('stack');
+      expect(stack?.isGroup).toBe(false);
+      expect(stack?.dir).toBe('TB');
+      expect(stack?.stackLayers?.map((l) => [l.id, l.label])).toEqual([
+        ['UI', 'Frontend'],
+        ['API', 'API layer'],
+        ['DB', 'Database'],
+      ]);
+      // The members are layers, not nodes of their own
+      expect(nodes.map((n) => n.id)).toEqual(['S']);
+    });
+
+    it('keeps source order for a chain, which the member list holds newest first', function () {
+      const { nodes } = parseStack(`
+        flowchart TB
+          subgraph S
+            direction LR
+            A ~~~ B ~~~ C
+          end
+          S@{ layout: stack }
+      `);
+      const stack = nodes.find((n) => n.id === 'S');
+      expect(stack?.dir).toBe('LR');
+      expect(stack?.stackLayers?.map((l) => l.id)).toEqual(['A', 'B', 'C']);
+    });
+
+    it('orders layers by the subgraph body even when a member was mentioned earlier', function () {
+      const { nodes } = parseStack(`
+        flowchart LR
+          X --> DB
+          subgraph S
+            UI
+            API
+            DB
+          end
+          S@{ layout: stack }
+      `);
+      expect(nodes.find((n) => n.id === 'S')?.stackLayers?.map((l) => l.id)).toEqual([
+        'UI',
+        'API',
+        'DB',
+      ]);
+    });
+
+    it('redirects edges to the stack and keeps the layer each end attaches to', function () {
+      const { edges } = parseStack(`
+        flowchart LR
+          User --> API
+          subgraph S
+            UI
+            API
+            DB
+          end
+          S@{ layout: stack }
+          DB --> Backup
+          Admin --> S
+      `);
+      const toApi = edges.find((e) => e.start === 'User');
+      expect(toApi).toMatchObject({ end: 'S', endLayer: 'API', startLayer: undefined });
+      expect(toApi?.id).toContain('API');
+      expect(edges.find((e) => e.end === 'Backup')).toMatchObject({
+        start: 'S',
+        startLayer: 'DB',
+      });
+      // An edge to the subgraph itself attaches to the stack as a whole
+      expect(edges.find((e) => e.start === 'Admin')).toMatchObject({
+        end: 'S',
+        endLayer: undefined,
+      });
+    });
+
+    it('drops edges between layers of the same stack', function () {
+      const { edges } = parseStack(`
+        flowchart LR
+          subgraph S
+            A --> B
+          end
+          S@{ layout: stack }
+      `);
+      expect(edges).toHaveLength(0);
+    });
+
+    it('renders a stack that holds another subgraph as a normal subgraph', function () {
+      const { nodes } = parseStack(`
+        flowchart LR
+          subgraph S
+            subgraph Inner
+              A
+            end
+            B
+          end
+          S@{ layout: stack }
+      `);
+      expect(nodes.find((n) => n.id === 'S')?.isGroup).toBe(true);
+      expect(nodes.find((n) => n.id === 'B')).toBeDefined();
+    });
+
+    it('leaves a collapsed stack collapsed', function () {
+      const { nodes } = parseStack(`
+        flowchart LR
+          subgraph S
+            A
+            B
+          end
+          S@{ layout: stack, view: collapsed }
+      `);
+      expect(nodes.find((n) => n.id === 'S')?.shape).toBe('collapsedGroup');
+    });
+  });
 });

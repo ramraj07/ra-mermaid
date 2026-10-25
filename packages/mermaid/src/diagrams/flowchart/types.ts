@@ -82,6 +82,8 @@ export interface FlowSubGraph {
   id: string;
   labelType: string;
   nodes: string[];
+  /** `nodes` in the order the subgraph's body lists them (used to order stack layers). */
+  memberOrder?: string[];
   title: string;
   /**
    * Optional `@{ ... }` metadata attached to the subgraph via a
