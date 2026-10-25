@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mermaid Playground</title>
+    <style>
+      :root {
+        --bg: #f7f7f8;
+        --panel: #ffffff;
+        --text: #1d1d1f;
+        --muted: #6b6b72;
+        --border: #dcdce0;
+        --accent: #3b5bdb;
+        --error: #c92a2a;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #141416;
+          --panel: #1c1c1f;
+          --text: #ececf0;
+          --muted: #9a9aa3;
+          --border: #34343a;
+          --accent: #7c95ff;
+          --error: #ff8787;
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.4 system-ui,
+          -apple-system,
+          sans-serif;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      header h1 {
+        font-size: 15px;
+        margin: 0 8px 0 0;
+      }
+      label {
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      select,
+      button {
+        font: inherit;
+        color: var(--text);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        cursor: pointer;
+      }
+      button:hover,
+      select:hover {
+        border-color: var(--accent);
+      }
+      .spacer {
+        flex: 1;
+      }
+      #status {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      main {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(280px, 38%) 1fr;
+      }
+      textarea {
+        width: 100%;
+        height: 100%;
+        resize: none;
+        border: 0;
+        border-right: 1px solid var(--border);
+        padding: 16px;
+        background: var(--panel);
+        color: var(--text);
+        font:
+          13px/1.5 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        tab-size: 2;
+        outline: none;
+      }
+      #preview {
+        overflow: auto;
+        padding: 24px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+      }
+      #preview svg {
+        max-width: 100%;
+        height: auto;
+      }
+      #error {
+        display: none;
+        margin: 0;
+        padding: 10px 16px;
+        color: var(--error);
+        border-top: 1px solid var(--border);
+        background: var(--panel);
+        white-space: pre-wrap;
+        font:
+          12px/1.4 ui-monospace,
+          Menlo,
+          monospace;
+      }
+      @media (max-width: 720px) {
+        main {
+          grid-template-columns: 1fr;
+          grid-template-rows: 40% 1fr;
+        }
+        textarea {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Mermaid Playground</h1>
+      <label
+        >Example
+        <select id="example"></select>
+      </label>
+      <label
+        >Layout
+        <select id="layout">
+          <option value="elk">ELK</option>
+          <option value="dagre">dagre</option>
+        </select>
+      </label>
+      <label
+        >Theme
+        <select id="theme">
+          <option value="default">default</option>
+          <option value="neutral">neutral</option>
+          <option value="dark">dark</option>
+          <option value="forest">forest</option>
+        </select>
+      </label>
+      <span class="spacer"></span>
+      <span id="status"></span>
+      <button id="share" type="button">Copy link</button>
+      <button id="download" type="button">Download SVG</button>
+    </header>
+    <main>
+      <textarea id="code" spellcheck="false" aria-label="Diagram code"></textarea>
+      <div id="preview" aria-live="polite"></div>
+    </main>
+    <pre id="error"></pre>
+
+    <script type="module">
+      import mermaid from './mermaid.esm.min.mjs';
+      import layouts from './mermaid-layout-elk.esm.min.mjs';
+
+      mermaid.registerLayoutLoaders(layouts);
+
+      const examples = {
+        'Stacked subgraph': `flowchart LR
+  User --> UI
+  User --> API
+  Admin --> DB
+  subgraph S [Our stack]
+    UI[Frontend]
+    API[API layer]
+    DB[(Database)]
+  end
+  S@{ layout: stack }
+  API --> Logs
+  DB --> Backup`,
+        'Horizontal stack': `flowchart TB
+  Client --> B
+  subgraph S
+    direction LR
+    A[Left] ~~~ B[Middle] ~~~ C[Right]
+  end
+  S@{ layout: stack }
+  A --> X
+  C --> Y`,
+        'Collapsed subgraph': `flowchart TD
+  Start --> one
+  subgraph one [My Group]
+    A --> B
+    B --> C
+  end
+  one --> End
+  one@{ view: collapsed }`,
+        Flowchart: `flowchart TD
+  A[Christmas] -->|Get money| B(Go shopping)
+  B --> C{Let me think}
+  C -->|One| D[Laptop]
+  C -->|Two| E[iPhone]
+  C -->|Three| F[fa:fa-car Car]`,
+        Sequence: `sequenceDiagram
+  Alice->>John: Hello John, how are you?
+  John-->>Alice: Great!
+  Alice-)John: See you later!`,
+      };
+
+      const $ = (id) => document.getElementById(id);
+      const code = $('code');
+      const preview = $('preview');
+      const error = $('error');
+      const status = $('status');
+
+      for (const name of Object.keys(examples)) {
+        $('example').append(new Option(name, name));
+      }
+
+      // The diagram lives in the URL hash, so a link reproduces it exactly.
+      const encode = (text) =>
+        btoa(String.fromCharCode(...new TextEncoder().encode(text)))
+          .replaceAll('+', '-')
+          .replaceAll('/', '_')
+          .replace(/=+$/, '');
+      const decode = (value) => {
+        const b64 = value.replaceAll('-', '+').replaceAll('_', '/');
+        return new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+      };
+      const readHash = () => {
+        const params = new URLSearchParams(location.hash.slice(1));
+        try {
+          return {
+            code: params.has('code') ? decode(params.get('code')) : undefined,
+            layout: params.get('layout') ?? undefined,
+            theme: params.get('theme') ?? undefined,
+          };
+        } catch {
+          return {};
+        }
+      };
+      const writeHash = () => {
+        const params = new URLSearchParams({
+          code: encode(code.value),
+          layout: $('layout').value,
+          theme: $('theme').value,
+        });
+        history.replaceState(null, '', '#' + params);
+      };
+
+      const initial = readHash();
+      code.value = initial.code ?? examples['Stacked subgraph'];
+      if (initial.layout) $('layout').value = initial.layout;
+      if (initial.theme) $('theme').value = initial.theme;
+      else if (matchMedia('(prefers-color-scheme: dark)').matches) $('theme').value = 'dark';
+
+      let renderId = 0;
+      const render = async () => {
+        const id = ++renderId;
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: $('theme').value,
+          layout: $('layout').value,
+          securityLevel: 'strict',
+        });
+        const started = performance.now();
+        try {
+          await mermaid.parse(code.value);
+          const { svg } = await mermaid.render('diagram' + id, code.value);
+          if (id !== renderId) return;
+          preview.innerHTML = svg;
+          error.style.display = 'none';
+          status.textContent = `${Math.round(performance.now() - started)} ms`;
+        } catch (e) {
+          if (id !== renderId) return;
+          error.textContent = String(e?.message ?? e);
+          error.style.display = 'block';
+          status.textContent = 'error';
+          // `render` leaves its scratch element behind when it throws.
+          document.getElementById('ddiagram' + id)?.remove();
+        }
+        writeHash();
+      };
+
+      let timer;
+      const scheduleRender = () => {
+        clearTimeout(timer);
+        timer = setTimeout(render, 250);
+      };
+
+      code.addEventListener('input', scheduleRender);
+      code.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          code.setRangeText('  ', code.selectionStart, code.selectionEnd, 'end');
+          scheduleRender();
+        }
+      });
+      $('layout').addEventListener('change', render);
+      $('theme').addEventListener('change', render);
+      $('example').addEventListener('change', (e) => {
+        code.value = examples[e.target.value];
+        render();
+      });
+      $('share').addEventListener('click', async () => {
+        writeHash();
+        try {
+          await navigator.clipboard.writeText(location.href);
+          status.textContent = 'Link copied';
+        } catch {
+          status.textContent = 'Copy the address bar to share';
+        }
+      });
+      $('download').addEventListener('click', () => {
+        const svg = preview.querySelector('svg');
+        if (!svg) return;
+        const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
+        const a = Object.assign(document.createElement('a'), {
+          href: URL.createObjectURL(blob),
+          download: 'diagram.svg',
+        });
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+
+      render();
+    </script>
+  </body>
+</html>

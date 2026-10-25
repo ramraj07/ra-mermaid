@@ -1783,6 +1783,52 @@ id). When a subgraph is collapsed:
 `view: expanded` is the default and renders the subgraph normally, so omitting the
 metadata (or setting `view: expanded`) keeps the existing behavior.
 
+### Stacked subgraphs (v\<MERMAID_RELEASE_VERSION>+)
+
+A subgraph can draw its nodes as a stack of boxes that touch, all the same width,
+by attaching `@{ layout: stack }` to its id. Edges still connect to the individual
+boxes in the stack.
+
+```mermaid-example
+flowchart LR
+    User --> UI
+    Admin --> DB
+    subgraph S [Our stack]
+        UI[Frontend]
+        API[API layer]
+        DB[(Database)]
+    end
+    S@{ layout: stack }
+    API --> Logs
+    DB --> Backup
+```
+
+```mermaid
+flowchart LR
+    User --> UI
+    Admin --> DB
+    subgraph S [Our stack]
+        UI[Frontend]
+        API[API layer]
+        DB[(Database)]
+    end
+    S@{ layout: stack }
+    API --> Logs
+    DB --> Backup
+```
+
+- The boxes are stacked top to bottom, in the order the subgraph's body lists
+  them. Set `direction LR` inside the subgraph to stack them left to right
+  instead, or `BT` / `RL` to reverse the order.
+- Every box in a stack is drawn as a rectangle, whatever shape its node was
+  given. Node styles and classes still apply to each box.
+- An edge to a node in the stack attaches to that node's box, on a side of the
+  stack the box reaches. An edge to the subgraph id attaches to the stack as a
+  whole.
+- An edge between two nodes of the same stack is not drawn.
+- The subgraph's title is not drawn, and a stack cannot contain another
+  subgraph: such a subgraph is drawn as a normal subgraph.
+
 ## Markdown Strings
 
 The "Markdown Strings" feature enhances flowcharts and mind maps by offering a more versatile string type, which supports text formatting options such as bold and italics, and automatically wraps text within labels.

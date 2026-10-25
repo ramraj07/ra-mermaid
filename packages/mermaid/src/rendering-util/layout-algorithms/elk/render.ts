@@ -11,6 +11,7 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 import { type TreeData, findCommonAncestor } from './find-common-ancestor.js';
 import { findSubgraphFeedbackEdges } from './subgraphFeedbackEdges.js';
 import { applyElkLineJumps } from './lineHops.js';
+import { attachStackLayerPorts, restoreStackPortEndpoints, stackLayerNode } from './stackPorts.js';
 import { clusterPaintsTitle } from '../../rendering-elements/clusters.js';
 import { markerOffsets, markerOffsets2 } from '../../../utils/lineWithOffset.js';
 import {
@@ -123,6 +124,8 @@ interface ElkLayoutState {
   elkGraph: any;
   nodeDb: Record<string, NodeWithVertex>;
   parentLookupDb: TreeData;
+  /** Stack layer port ids, mapped to the stack node that owns each. */
+  stackPortOwners: Map<string, string>;
 }
 
 interface ElkLayoutResult {
@@ -698,6 +701,7 @@ export async function runElkLayoutCore(
   elkContext.log.info('Drawing flowchart using v4 renderer', elk);
 
   const graph = await runElkLayout(elk, layoutState.elkGraph, elkContext.log);
+  restoreStackPortEndpoints(graph.edges, layoutState.stackPortOwners);
   applyElkLayoutResult(data4Layout, graph, layoutState, elkContext.log);
   orderNodesForElkPaint(data4Layout.nodes);
   return graph;
@@ -726,8 +730,12 @@ export function buildElkGraphFromLayoutData(
     reverseSubgraphFeedbackEdges(elkGraph, parentLookupDb);
   }
   applyCyclicEntryConstraint(data4Layout, nodeDb);
+  // Last, so every step above sees plain node ids on the edges.
+  const stackPortOwners = attachStackLayerPorts(elkGraph.edges, nodeDb, (node) =>
+    dir2ElkDirection((node.parentId && nodeDb[node.parentId]?.dir) || dir)
+  );
 
-  return { elkGraph, nodeDb, parentLookupDb };
+  return { elkGraph, nodeDb, parentLookupDb, stackPortOwners };
 }
 
 /**
@@ -2009,11 +2017,14 @@ function applyElkEdgeLayout(
     if (reversed) {
       [startId, endId] = [endId, startId];
     }
-    const startNode = layoutState.nodeDb[startId];
-    const endNode = layoutState.nodeDb[endId];
-    if (!startNode || !endNode) {
+    const startElkNode = layoutState.nodeDb[startId];
+    const endElkNode = layoutState.nodeDb[endId];
+    if (!startElkNode || !endElkNode) {
       return;
     }
+    // An end on a stack layer is clipped against that layer alone.
+    const startNode = stackLayerNode(startElkNode, layoutEdge.startLayer);
+    const endNode = stackLayerNode(endElkNode, layoutEdge.endLayer);
 
     // `elk.box` and `elk.rectpacking` place nodes but never route edges, so ELK
     // returns no sections. Guarded on length, not presence: an empty array would
@@ -2064,17 +2075,18 @@ function applyElkEdgeLayout(
     }
     // Captured after the reversal above, so `start` is the port at the edge's own source.
     const elkPorts = { start: points[0], end: points[points.length - 1] };
-    startNode.x = startNode.offset!.posX + startNode.width! / 2;
-    startNode.y = startNode.offset!.posY + startNode.height! / 2;
-    endNode.x = endNode.offset!.posX + endNode.width! / 2;
-    endNode.y = endNode.offset!.posY + endNode.height! / 2;
+    startElkNode.x = startElkNode.offset!.posX + startElkNode.width! / 2;
+    startElkNode.y = startElkNode.offset!.posY + startElkNode.height! / 2;
+    endElkNode.x = endElkNode.offset!.posX + endElkNode.width! / 2;
+    endElkNode.y = endElkNode.offset!.posY + endElkNode.height! / 2;
 
+    // A stack layer stand-in already carries its own centre.
     if (startNode.shape !== 'rect33') {
-      points.unshift({ x: startNode.x, y: startNode.y });
+      points.unshift({ x: startNode.x!, y: startNode.y! });
     }
 
     if (endNode.shape !== 'rect33') {
-      points.push({ x: endNode.x, y: endNode.y });
+      points.push({ x: endNode.x!, y: endNode.y! });
     }
 
     const clipped = sanitizeElkEdgePoints(points, startNode, endNode, log);
