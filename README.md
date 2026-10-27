@@ -1,6 +1,6 @@
 # mermaidStacks
 
-A fork of [Mermaid](https://github.com/mermaid-js/mermaid) that adds **stacked subgraphs** to flowcharts: the nodes of a subgraph drawn as touching, equal-width boxes in one block, with links to any node still landing on its own box.
+A fork of [Mermaid](https://github.com/mermaid-js/mermaid) that adds **stacked subgraphs** to flowcharts: the nodes of a subgraph drawn as touching, equal-width boxes in one block, with links to any node still landing on its own box. It also adds a **tight packing** option that shrinks the gaps in a flowchart's layout.
 
 **[Try it in the playground →](https://ramraj07.github.io/ra-mermaid/)**
 
@@ -40,6 +40,20 @@ flowchart LR
 - **Layouts:** works with both ELK (the default here) and dagre:
   - With ELK, each linked box gets its own fixed connection point (a "port") on the stack's outline.
   - With dagre, the end of the link is rerouted around the stack onto the box.
+
+## Tight packing
+
+Turn on `flowchart.tightPacking` to keep the same layout but shrink the gaps between boxes, between levels and inside subgraph frames to about 40% of their usual size. Arrows keep a short straight run in front of each arrowhead. The playground has a **Pack tighter** checkbox for it, or set it in a diagram's frontmatter:
+
+```text
+---
+config:
+  flowchart:
+    tightPacking: true
+---
+flowchart TD
+    ...
+```
 
 ## Use this build
 

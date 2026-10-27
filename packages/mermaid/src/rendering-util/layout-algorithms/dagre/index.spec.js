@@ -832,3 +832,37 @@ describe('prepareLayoutForDagre spacing precedence (#7932)', () => {
     expect(graph.graph().ranksep).toBe(70);
   });
 });
+
+describe('prepareLayoutForDagre tight packing', () => {
+  const base = { direction: 'TB', nodes: [], edges: [] };
+
+  it('shrinks node and rank spacing for a flowchart with tightPacking on', () => {
+    const { graph } = prepareLayoutForDagre({
+      ...base,
+      type: 'flowchart-v2',
+      config: { flowchart: { nodeSpacing: 50, rankSpacing: 100, tightPacking: true } },
+    });
+    expect(graph.graph().nodesep).toBe(20);
+    expect(graph.graph().ranksep).toBe(40);
+    expect(graph.graph().packing).toBe(0.4);
+  });
+
+  it('keeps the rank gap long enough for an arrowhead', () => {
+    const { graph } = prepareLayoutForDagre({
+      ...base,
+      type: 'flowchart-v2',
+      config: { flowchart: { nodeSpacing: 50, rankSpacing: 50, tightPacking: true } },
+    });
+    expect(graph.graph().ranksep).toBe(32);
+  });
+
+  it('leaves other diagrams that share the config alone', () => {
+    const { graph } = prepareLayoutForDagre({
+      ...base,
+      type: 'stateDiagram',
+      config: { flowchart: { nodeSpacing: 50, rankSpacing: 50, tightPacking: true } },
+    });
+    expect(graph.graph().nodesep).toBe(50);
+    expect(graph.graph().ranksep).toBe(50);
+  });
+});

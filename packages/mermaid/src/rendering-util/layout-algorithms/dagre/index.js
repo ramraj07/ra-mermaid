@@ -3,6 +3,7 @@ import { layout as dagreLayout } from 'dagre-d3-es/src/dagre/index.js';
 import * as graphlib from 'dagre-d3-es/src/graphlib/index.js';
 import { createLayoutElementGroups, insertMeasuredNode } from '../../createGraph.js';
 import { createCommonLayoutRenderer } from '../common/index.js';
+import { packingFactor, packRankGap } from '../common/packing.js';
 import { profiler } from '../../../profiler.js';
 import { updateNodeBounds } from '../../rendering-elements/shapes/util.js';
 import {
@@ -318,10 +319,10 @@ const measureDagreGraph = async ({
 
         // `node.graph.setGraph` applies the graph configurations such as nodeSpacing to subgraphs as without this the default values would be used
         // We override only the `ranksep` and `nodesep` configurations to allow for setting subgraph spacing while avoiding overriding other properties
-        const { ranksep, nodesep } = graph.graph();
+        const { ranksep, nodesep, packing = 1 } = graph.graph();
         node.graph.setGraph({
           ...node.graph.graph(),
-          ranksep: ranksep + 25,
+          ranksep: ranksep + 25 * packing,
           nodesep,
         });
 
@@ -653,6 +654,10 @@ const renderDagreSubgraph = async (options) => {
 };
 
 export const prepareLayoutForDagre = (data4Layout) => {
+  // Carried on the graph so nested subgraph layouts shrink their gaps the same way.
+  const packing = packingFactor(data4Layout);
+  const packNodes = (spacing) => (spacing === undefined ? spacing : spacing * packing);
+  const packRanks = (spacing) => (spacing === undefined ? spacing : packRankGap(spacing, packing));
   const graph = new graphlib.Graph({
     multigraph: true,
     compound: true,
@@ -665,14 +670,17 @@ export const prepareLayoutForDagre = (data4Layout) => {
       // > the flowchart config as a generic fallback. The flowchart keys have
       // schema defaults and therefore always exist, so they must come last or
       // they silently shadow every diagram's own spacing (see #7932).
-      nodesep:
+      nodesep: packNodes(
         data4Layout.config?.nodeSpacing ||
-        data4Layout.nodeSpacing ||
-        data4Layout.config?.flowchart?.nodeSpacing,
-      ranksep:
+          data4Layout.nodeSpacing ||
+          data4Layout.config?.flowchart?.nodeSpacing
+      ),
+      ranksep: packRanks(
         data4Layout.config?.rankSpacing ||
-        data4Layout.rankSpacing ||
-        data4Layout.config?.flowchart?.rankSpacing,
+          data4Layout.rankSpacing ||
+          data4Layout.config?.flowchart?.rankSpacing
+      ),
+      packing,
       marginx: 8,
       marginy: 8,
     })

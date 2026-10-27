@@ -117,6 +117,10 @@
         outline: 2px solid var(--accent);
         outline-offset: 1px;
       }
+      input[type='checkbox'] {
+        accent-color: var(--accent);
+        margin: 0;
+      }
       button.primary {
         background: var(--accent);
         border-color: var(--accent);
@@ -340,6 +344,10 @@
             <option value="forest">forest</option>
           </select>
         </label>
+        <label title="Keep the layout, shrink the gaps between boxes">
+          <input type="checkbox" id="tight" />
+          Pack tighter
+        </label>
         <span class="spacer"></span>
         <span id="status" aria-live="polite"></span>
         <button id="openSnapshots" type="button" aria-controls="snapshots" aria-expanded="false">
@@ -460,6 +468,7 @@
             code: params.has('code') ? decode(params.get('code')) : undefined,
             layout: params.get('layout') ?? undefined,
             theme: params.get('theme') ?? undefined,
+            tight: params.get('tight') === '1',
           };
         } catch {
           return {};
@@ -471,6 +480,7 @@
           layout: $('layout').value,
           theme: $('theme').value,
         });
+        if ($('tight').checked) params.set('tight', '1');
         history.replaceState(null, '', '#' + params);
       };
 
@@ -575,6 +585,7 @@
           startOnLoad: false,
           theme: $('theme').value,
           layout: $('layout').value,
+          flowchart: { tightPacking: $('tight').checked },
           securityLevel: 'strict',
         });
         const started = performance.now();
@@ -613,10 +624,11 @@
         clearTimeout(timer);
         timer = setTimeout(render, 250);
       };
-      const load = ({ code: text, layout, theme }) => {
+      const load = ({ code: text, layout, theme, tight }) => {
         code.value = text;
         if (layout) $('layout').value = layout;
         if (theme) $('theme').value = theme;
+        if (tight !== undefined) $('tight').checked = tight;
         refit = true;
         render();
       };
@@ -626,6 +638,7 @@
       if (initial.layout) $('layout').value = initial.layout;
       if (initial.theme) $('theme').value = initial.theme;
       else if (matchMedia('(prefers-color-scheme: dark)').matches) $('theme').value = 'dark';
+      $('tight').checked = Boolean(initial.tight);
 
       code.addEventListener('input', scheduleRender);
       code.addEventListener('keydown', (e) => {
@@ -640,6 +653,10 @@
         render();
       });
       $('theme').addEventListener('change', render);
+      $('tight').addEventListener('change', () => {
+        refit = true;
+        render();
+      });
       $('example').addEventListener('change', (e) => load({ code: examples[e.target.value] }));
       $('share').addEventListener('click', async () => {
         writeHash();
@@ -705,7 +722,9 @@
           name.title = snap.name;
           const meta = document.createElement('div');
           meta.className = 'snap-meta';
-          meta.textContent = `${formatDate(snap.savedAt)} · ${snap.layout}`;
+          meta.textContent = [formatDate(snap.savedAt), snap.layout, snap.tight && 'packed tight']
+            .filter(Boolean)
+            .join(' · ');
           info.append(name, meta);
 
           const open = document.createElement('button');
@@ -761,6 +780,7 @@
           code: code.value,
           layout: $('layout').value,
           theme: $('theme').value,
+          tight: $('tight').checked,
           savedAt: new Date().toISOString(),
         };
         if (writeSnapshots([snapshot, ...readSnapshots()])) {

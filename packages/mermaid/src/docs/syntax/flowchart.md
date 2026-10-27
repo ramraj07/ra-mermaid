@@ -1121,6 +1121,29 @@ flowchart LR
 - The subgraph's title is not drawn, and a stack cannot contain another
   subgraph: such a subgraph is drawn as a normal subgraph.
 
+### Tight packing (v<MERMAID_RELEASE_VERSION>+)
+
+Set `flowchart.tightPacking` to keep the same layout but cut the gaps between
+nodes, between levels and inside subgraph frames to about 40% of their usual size.
+Edges keep a short straight run before each arrowhead, so arrows stay readable.
+
+```mermaid-example
+---
+config:
+  flowchart:
+    tightPacking: true
+---
+flowchart TD
+    A[Start] --> B{Decide}
+    B -->|yes| C[Do it]
+    B -->|no| D[Skip]
+    subgraph G [Group]
+        C --> E[Check]
+        D --> E
+    end
+    E --> F[Done]
+```
+
 ## Markdown Strings
 
 The "Markdown Strings" feature enhances flowcharts and mind maps by offering a more versatile string type, which supports text formatting options such as bold and italics, and automatically wraps text within labels.

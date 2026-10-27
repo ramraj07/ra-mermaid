@@ -496,6 +496,14 @@ export interface FlowchartDiagramConfig extends BaseDiagramConfig {
    *
    */
   inheritDir?: boolean;
+  /**
+   * If true, the gaps the layout leaves between nodes, between levels and
+   * inside subgraph frames are cut to about 40% of their usual size. Node
+   * sizes and the layout's structure stay the same. Applies to the `dagre`
+   * and `elk` layouts.
+   *
+   */
+  tightPacking?: boolean;
 }
 /**
  * This interface was referenced by `MermaidConfig`'s JSON-Schema
