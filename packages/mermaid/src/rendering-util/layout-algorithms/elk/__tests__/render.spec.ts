@@ -62,6 +62,18 @@ describe('resolveContainerAlgorithm', () => {
 });
 
 describe('buildSubgraphLayoutOptions', () => {
+  it("scales a subgraph's gaps by the packing factor, keeping the edge approach", () => {
+    const node = { padding: 8, labelData: { width: 44, height: 14 } };
+    const normal = buildSubgraphLayoutOptions(node, {}, 'layered');
+    const tight = buildSubgraphLayoutOptions(node, {}, 'layered', undefined, 0.4);
+    expect(normal['spacing.nodeNode']).toBe(50);
+    expect(tight['spacing.nodeNode']).toBe(20);
+    expect(tight['elk.spacing.edgeEdge']).toBe(8);
+    expect(tight['elk.padding']).toBe('[top=10,left=10,bottom=10,right=10]');
+    // An arrowhead still gets a straight run in front of it.
+    expect(tight['elk.layered.spacing.edgeNodeBetweenLayers']).toBe(16);
+  });
+
   it('derives a label-based minimum size for containers with their own algorithm', () => {
     const opts = buildSubgraphLayoutOptions(
       { padding: 8, labelData: { width: 44, height: 14 }, metadata: { algorithm: 'elk.box' } },

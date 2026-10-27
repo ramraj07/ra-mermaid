@@ -2627,6 +2627,14 @@ $defs: # JSON Schema definition (maybe we should move these to a separate file)
         description: |
           If true, subgraphs without explicit direction will inherit the global graph direction
           (e.g., LR, TB, RL, BT). Defaults to false to preserve legacy layout behavior.
+      tightPacking:
+        type: boolean
+        default: false
+        description: |
+          If true, the gaps the layout leaves between nodes, between levels and
+          inside subgraph frames are cut to about 40% of their usual size. Node
+          sizes and the layout's structure stay the same. Applies to the `dagre`
+          and `elk` layouts.
 
   SankeyLinkColor:
     description: |

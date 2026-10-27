@@ -11,6 +11,7 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 import { type TreeData, findCommonAncestor } from './find-common-ancestor.js';
 import { findSubgraphFeedbackEdges } from './subgraphFeedbackEdges.js';
 import { applyElkLineJumps } from './lineHops.js';
+import { packingFactor } from '../common/packing.js';
 import { attachStackLayerPorts, restoreStackPortEndpoints, stackLayerNode } from './stackPorts.js';
 import { clusterPaintsTitle } from '../../rendering-elements/clusters.js';
 import { markerOffsets, markerOffsets2 } from '../../../utils/lineWithOffset.js';
@@ -221,6 +222,12 @@ const DEFAULT_SUBGRAPH_SPACING_BASE_VALUE = 24;
  * carrying two values for it and no say in which one won.
  */
 const DEFAULT_SUBGRAPH_NODE_SPACING = 50;
+/**
+ * Shortest straight run into a node that `flowchart.tightPacking` leaves an
+ * edge: a little over the 10px arrowhead, so the turn never sits under it.
+ */
+const MIN_PACKED_EDGE_APPROACH = 16;
+const elkPadding = (pad: number) => `[top=${pad},left=${pad},bottom=${pad},right=${pad}]`;
 /** Inner padding reserved around a container that runs its own algorithm. */
 const CONTAINER_PADDING = 15;
 /** Same, for `elk.rectpacking`, which packs tighter. */
@@ -380,7 +387,9 @@ export function buildSubgraphLayoutOptions(
   },
   elkConfig: ElkSubgraphConfig | undefined,
   algorithm: string | undefined,
-  log?: ElkLayoutContext['log']
+  log?: ElkLayoutContext['log'],
+  /** `packingFactor` for the diagram: every gap below is scaled by it. */
+  packing = 1
 ): Record<string, unknown> {
   // Every group gets its painted title width as a floor via
   // `groupTitleSizeOptions` below. Containers that run their own algorithm
@@ -398,7 +407,7 @@ export function buildSubgraphLayoutOptions(
     // Reserve the painted title width before routing. Enlarging a frame after
     // ELK has placed its ports leaves those ports inside the painted border.
     ...groupTitleSizeOptions(node),
-    'spacing.baseValue': DEFAULT_SUBGRAPH_SPACING_BASE_VALUE,
+    'spacing.baseValue': DEFAULT_SUBGRAPH_SPACING_BASE_VALUE * packing,
     // The straight run an edge gets before the node it enters, bought on its
     // own rather than out of `spacing.baseValue` — see the note there. This is
     // the layered-scoped key; the unscoped `spacing.edgeNodeBetweenLayers` is
@@ -419,17 +428,20 @@ export function buildSubgraphLayoutOptions(
     // `right-angles-not-curves` starts tripping `edge-parallel-segment-too-close`
     // because this spacing also separates edges running alongside each other in
     // the layer gap. 30 is the lowest value that keeps the corpus clean.
-    'elk.layered.spacing.edgeNodeBetweenLayers': 30,
+    //
+    // Tight packing still keeps `MIN_PACKED_EDGE_APPROACH`, so an arrowhead
+    // never ends up longer than the run it sits on.
+    'elk.layered.spacing.edgeNodeBetweenLayers': Math.max(MIN_PACKED_EDGE_APPROACH, 30 * packing),
     // Separation between edges sharing a lane. Also raised off the base value,
     // so that lowering the base does not leave parallel edges touching.
-    'elk.spacing.edgeEdge': 20,
+    'elk.spacing.edgeEdge': 20 * packing,
     // Node separation, likewise bought on its own — see the note on the constant.
-    'spacing.nodeNode': DEFAULT_SUBGRAPH_NODE_SPACING,
+    'spacing.nodeNode': DEFAULT_SUBGRAPH_NODE_SPACING * packing,
     // Breathing room between a frame and its children. Set explicitly rather
     // than left to ELK's default of 12. The top gets the same value as the
     // rest: ELK reserves the subgraph's own title strip on top of whatever is
     // given here, so adding the label height again double-counts it.
-    'elk.padding': `[top=${SUBGRAPH_PADDING},left=${SUBGRAPH_PADDING},bottom=${SUBGRAPH_PADDING},right=${SUBGRAPH_PADDING}]`,
+    'elk.padding': elkPadding(Math.round(SUBGRAPH_PADDING * packing)),
     'nodeLabels.placement': '[H_CENTER V_TOP, INSIDE]',
 
     'elk.layered.mergeEdges': elkConfig?.mergeEdges,
@@ -942,6 +954,7 @@ function createRootElkGraph(
   rootLayoutOptions?: Record<string, unknown>
 ): any {
   const preset = resolveElkPreset(data4Layout.config.elk?.preset);
+  const packing = packingFactor(data4Layout);
   const graph = {
     id: 'root',
     layoutOptions: {
@@ -953,7 +966,12 @@ function createRootElkGraph(
         data4Layout.config.elk?.nodePlacementAlignment ?? preset.alignment,
       'elk.layered.mergeEdges': data4Layout.config.elk?.mergeEdges,
       'elk.direction': 'DOWN',
-      'spacing.baseValue': 40,
+      'spacing.baseValue': 40 * packing,
+      // Every root spacing derives from the base value, edge approaches too;
+      // tight packing keeps those long enough to clear an arrowhead.
+      ...(packing < 1 && {
+        'elk.layered.spacing.edgeNodeBetweenLayers': MIN_PACKED_EDGE_APPROACH,
+      }),
 
       'elk.layered.crossingMinimization.forceNodeModelOrder':
         data4Layout.config.elk?.forceNodeModelOrder,
@@ -1246,7 +1264,8 @@ function configureSubgraphNodes(
       node,
       data4Layout.config.elk,
       elkContext.algorithm,
-      elkContext.log
+      elkContext.log,
+      packingFactor(data4Layout)
     );
     delete node.x;
     delete node.y;

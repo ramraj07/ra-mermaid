@@ -1,4 +1,5 @@
 /** Decorates with functions required by mermaids dagre-wrapper. */
+import { packRankGap } from '../common/packing.js';
 import { log } from '../../../logger.js';
 import * as graphlib from 'dagre-d3-es/src/graphlib/index.js';
 
@@ -366,8 +367,9 @@ export const extractor = (graph, depth) => {
       })
         .setGraph({
           rankdir: dir,
-          nodesep: 50,
-          ranksep: 50,
+          nodesep: 50 * (graphSettings.packing ?? 1),
+          ranksep: packRankGap(50, graphSettings.packing ?? 1),
+          packing: graphSettings.packing,
           marginx: 8,
           marginy: 8,
         })
